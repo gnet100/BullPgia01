@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>בול פגיעה רספונסיבי - מאוחד</title>
+  <style>
+    :root{
+      --bg-grad-start: #465361;
+      --bg-grad-end:   #222e39;
+      --panel-bg:      #bddbe0;
+      --accent:        #388386;
+      --accent-dark:   #235e6c;
+      --muted:         #2f526a;
+      --success:       #4caf50;
+      --danger:        #ff1744;
+      --glass:         rgba(255,255,255,0.06);
+
+      --max-width: 1100px;
+      --gap: 1.5rem;
+      --radius: 14px;
+      --touch: 48px; /* מטרת מגע מומלצת */
+      --small-touch: 40px;
+      --card-padding: 1.2rem;
+      --transition: 180ms ease;
+      --shadow-1: 0 6px 18px rgba(20,40,50,0.12);
+      --font-size-base: 16px;
+    }
+
+    /* בסיס */
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial; font-size:var(--font-size-base); background:linear-gradient(120deg,var(--bg-grad-start) 0%,var(--bg-grad-end) 100%); color:#fff; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
+    .app {max-width:var(--max-width); margin:1.2rem auto; padding:1rem; box-sizing:border-box;}
+    .container {display:flex; gap:var(--gap); align-items:flex-start; justify-content:center; margin:0 auto; box-sizing:border-box;}
+
+    /* לוח משחק */
+    #gameBoard{
+      background:var(--panel-bg);
+      color:var(--muted);
+      border-radius:var(--radius);
+      padding:var(--card-padding);
+      box-shadow:var(--shadow-1);
+      width:100%;
+      box-sizing:border-box;
+      display:flex;
+      flex-direction:column;
+      gap:0.8rem;
+      min-width:280px;
+    }
+
+    /* סרגל פעולות */
+    #actionsBar {display:flex; justify-content:flex-end; gap:0.6rem; align-items:center;}
+    button.primary {
+      background:var(--accent);
+      color:#fff;
+      border:none;
+      border-radius:12px;
+      padding:0.55rem 1.2rem;
+      font-weight:600;
+      min-height:var(--touch);
+      min-width:7rem;
+      cursor:pointer;
+      box-shadow: 0 5px 0 var(--accent-dark);
+      transition: transform var(--transition), box-shadow var(--transition), background var(--transition);
+      touch-action:manipulation;
+    }
+    button.primary:active { transform:translateY(2px); box-shadow:0 3px 0 var(--accent-dark); }
+    button.ghost { background:transparent; color:var(--muted); border:2px solid rgba(0,0,0,0.06); padding:0.45rem 0.9rem; border-radius:10px; min-height:var(--touch); cursor:pointer; }
+
+    /* צבעים לבחירה */
+    .colors { display:flex; gap:0.5rem; flex-wrap:wrap; justify-content:center; padding:0.25rem 0; }
+    .color-btn {
+      width:var(--small-touch);
+      height:var(--small-touch);
+      min-width:var(--small-touch);
+      min-height:var(--small-touch);
+      border-radius:50%;
+      border:2.5px solid rgba(66,113,119,0.6);
+      box-shadow: inset 0 2px 6px rgba(255,255,255,0.6), 0 2px 8px rgba(0,0,0,0.06);
+      cursor:pointer;
+      display:inline-block;
+      transition: transform var(--transition), box-shadow var(--transition);
+      flex: 0 0 auto;
+      touch-action: manipulation;
+    }
+    .color-btn:active { transform:scale(0.96); }
+
+    /* שורת הניחוש הנוכחי */
+    #current { display:flex; gap:0.4rem; justify-content:center; min-height:var(--touch); align-items:center; flex-wrap:nowrap; overflow:auto; padding-bottom:0.25rem; }
+    .current-color {
+      width:var(--touch);
+      height:var(--touch);
+      border-radius:50%;
+      border:2.5px solid rgba(66,113,119,0.8);
+      box-shadow: inset 0 2px 6px rgba(255,255,255,0.7);
+      display:inline-block;
+      cursor:pointer;
+      flex:0 0 auto;
+      transition: transform var(--transition);
+    }
+    .current-color:active { transform:scale(0.98); }
+
+    /* סטטוס */
+    #status { font-weight:700; font-size:1rem; text-align:center; min-height:1.4em; }
+
+    /* ניחושים היסטוריים */
+    #guesses {
+      max-height:360px;
+      overflow:auto;
+      padding-right:0.5rem;
+      display:flex;
+      flex-direction:column;
+      gap:0.6rem;
+    }
+    .guess-row {
+      display:flex; align-items:center; justify-content:space-between;
+      background:#b6e4d8; color:var(--muted);
+      border-radius:10px; padding:0.45rem 0.6rem; box-shadow: inset 0 2px 8px rgba(120,120,120,0.04);
+      gap:0.6rem; touch-action:pan-y;
+      position:relative; overflow:hidden;
+    }
+    .guess-colors-list { display:flex; gap:0.35rem; align-items:center; }
+    .guess-color { width:28px; height:28px; border-radius:50%; border:2px solid rgba(81,117,113,0.8); display:inline-block; }
+
+    .result { min-width:60px; display:flex; gap:0.4rem; align-items:center; justify-content:center; }
+
+    .bull, .cow { width:20px; height:20px; border-radius:50%; border:2px solid rgba(55,91,80,0.9); display:inline-block; }
+    .bull { background:#375b50; }
+    .cow { background:#e6eee9; }
+
+    /* סייד אופציה (יעבור למטה בנייד) */
+    #sideOptions {
+      width:320px; min-width:220px; background:var(--panel-bg); color:var(--muted);
+      border-radius:var(--radius); padding:var(--card-padding); box-shadow:var(--shadow-1);
+      display:flex; flex-direction:column; gap:0.8rem; align-items:stretch;
+    }
+    #sideOptions h3{ margin:0; font-size:1.05rem; color:var(--muted); font-weight:700; }
+
+    .box { background:#c9dde4; border-radius:10px; padding:0.6rem; box-shadow: inset 0 2px 6px rgba(227,247,250,0.6); display:flex; flex-direction:column; gap:0.4rem; }
+    .balls-radio-group { display:flex; gap:0.6rem; justify-content:center; align-items:center; }
+    .balls-radio-group label { cursor:pointer; font-weight:600; color:var(--muted); }
+
+    /* hint area */
+    #hintBox { display:flex; gap:0.6rem; flex-direction:column; align-items:center; background:var(--panel-bg); padding:0.7rem; border-radius:12px; }
+    .hint-balls { display:flex; gap:0.6rem; justify-content:center; flex-wrap:nowrap; }
+    .hint-ball { width:var(--small-touch); height:var(--small-touch); border-radius:50%; border:2.5px solid rgba(99,113,116,0.9); box-shadow:0 3px 12px rgba(120,130,95,0.08); cursor:pointer; transition: box-shadow var(--transition), transform var(--transition); }
+    .hint-ball.revealed { box-shadow:0 4px 16px rgba(0,0,0,0.12); transform:scale(1.02); }
+
+    /* קטנים יותר ונייד */
+    @media (max-width:1024px){
+      .container { gap:1rem; padding:0 0.6rem;}
+      #sideOptions { width:300px; }
+    }
+
+    @media (max-width:800px){
+      .container{flex-direction:column-reverse; align-items:stretch;}
+      #sideOptions{ width:100%; order:3;}
+      #gameBoard{ order:2;}
+      #hintBoxOuter{ order:1; margin-bottom:0.5rem;}
+      #guesses{ max-height:260px; }
+    }
+
+    @media (max-width:420px){
+      :root{ --touch:44px; --small-touch:36px; --card-padding:0.9rem; --gap:1rem; }
+      .guess-color{ width:24px;height:24px; }
+      .result{ min-width:48px; }
+    }
+
+    /* אנימציות קלות */
+    .pulse { animation:pulse 900ms ease; }
+    @keyframes pulse { 0%{ transform:scale(1);}50%{transform:scale(1.04);}100%{transform:scale(1);} }
+
+    /* מחוות: מחיקה — גלילה אנימצית של שורה */
+    .slide-out { transform: translateX(110%); transition: transform 320ms ease; opacity:0; }
+
+    /* סגנון גלילה עדין */
+    ::-webkit-scrollbar { height:8px; width:8px; }
+    ::-webkit-scrollbar-thumb { background:rgba(0,0,0,0.12); border-radius:8px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+
+    /* נגישות: דגש על פוקוס */
+    :focus { outline:3px solid rgba(66,131,138,0.25); outline-offset:2px; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="container" role="application" aria-label="משחק בול ופגיעה">
+      <!-- Hint & Reset (יופיע מעל בנייד כי ישתי column-reverse) -->
+      <div id="hintBoxOuter" style="display:flex; flex-direction:column; gap:0.6rem; align-items:stretch; min-width:220px;">
+        <div id="hintBox" aria-live="polite">
+          <div id="hintTitle" style="font-weight:700; color:var(--muted); text-align:center;">רמז</div>
+          <div class="hint-balls" id="hintBalls" role="list" aria-label="כדורי רמז"></div>
+        </div>
+        <button id="resetBtn" class="primary" aria-label="התחל מחדש">התחל מחדש</button>
+      </div>
+
+      <!-- Game Board -->
+      <main id="gameBoard" aria-labelledby="status" role="region">
+        <div id="status" aria-live="polite">טוען...</div>
+
+        <div class="colors" id="colorOptions" aria-label="אפשרויות צבע"></div>
+
+        <div id="current" aria-label="בחירה נוכחית" role="group"></div>
+
+        <div id="actionsBar">
+          <button id="checkBtn" class="primary" aria-label="בדוק ניחוש" title="בדוק">בדוק</button>
+          <button id="undoBtn" class="ghost" aria-label="ביטול בחירה" title="ביטול">בטל</button>
+        </div>
+
+        <section id="guesses" aria-label="היסטוריית ניחושים"></section>
+      </main>
+
+      <!-- Side options (עובר לתחתית בנייד) -->
+      <aside id="sideOptions" aria-label="אפשרויות משחק">
+        <h3>אפשרויות משחק</h3>
+
+        <div class="box" id="ballsCountBox">
+          <legend style="font-weight:700; color:var(--muted); text-align:center;">מספר צבעים בסוד המחשב</legend>
+          <div class="balls-radio-group" role="radiogroup" aria-label="מספר צבעים">
+            <label><input type="radio" name="ballsCount" value="2">2</label>
+            <label><input type="radio" name="ballsCount" value="3">3</label>
+            <label><input type="radio" name="ballsCount" value="4" checked>4</label>
+          </div>
+        </div>
+
+        <div class="box" id="noRepeatChoiceBox" style="align-items:center; justify-content:space-between; flex-direction:row;">
+          <label for="noRepeatCheck" style="font-weight:700; color:var(--muted);">בחירת צבעים שונים בלבד על ידי המחשב</label>
+          <input type="checkbox" id="noRepeatCheck" aria-label="ללא חזרות" />
+        </div>
+
+        <div class="box" style="align-items:center;">
+          <label style="font-weight:700;color:var(--muted);">הפעל אנימציות</label>
+          <div style="display:flex; gap:0.5rem;">
+            <button id="animToggle" class="ghost" aria-pressed="true">פעיל</button>
+          </div>
+        </div>
+
+      </aside>
+    </div>
+  </div>
+
+<script>
+/* קוד JavaScript - רספונסיבי, מגע, שמירה, מחוות */
+(() => {
+  // ---- קונפיג וצבעים ----
+  const allColors = ["#ff9800","#00bfff","#8bc34a","#ffe600","#2196f3","#ff1744"];
+  function getAllowedColors(ballsCount){
+    if(ballsCount===2) return allColors.slice(0,4);
+    if(ballsCount===3) return allColors.slice(0,5);
+    return allColors.slice(0,6);
+  }
+
+  // ---- מצב המשחק ----
+  let ballsCount = 4;
+  let allowNoRepeat = false;
+  let animationsEnabled = true;
+  let secretCode = [];
+  let currentGuess = [];
+  let guesses = []; // מערך של {colors:[], bulls, cows, id}
+  let revealed = []; // רמזים חשופים
+  let vibrationEnabled = true; // ניתן לשנות
+
+  // ---- DOM ----
+  const colorOptionsDiv = document.getElementById('colorOptions');
+  const currentDiv = document.getElementById('current');
+  const checkBtn = document.getElementById('checkBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const undoBtn = document.getElementById('undoBtn');
+  const statusDiv = document.getElementById('status');
+  const guessesDiv = document.getElementById('guesses');
+  const hintBallsDiv = document.getElementById('hintBalls');
+  const noRepeatCheck = document.getElementById('noRepeatCheck');
+  const ballsCountRadios = document.querySelectorAll('input[name="ballsCount"]');
+  const animToggle = document.getElementById('animToggle');
+
+  // Helpers
+  const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,8);
+
+  // ---- localStorage ----
+  const STORAGE_KEY = 'bulls_game_v1';
+  function saveState(){
+    try{
+      const state = { ballsCount, allowNoRepeat, secretCode, guesses, revealed, animationsEnabled };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }catch(e){ console.warn('save failed', e); }
+  }
+  function loadState(){
+    try{
+      const s = localStorage.getItem(STORAGE_KEY);
+      if(!s) return false;
+      const state = JSON.parse(s);
+      ballsCount = state.ballsCount || ballsCount;
+      allowNoRepeat = !!state.allowNoRepeat;
+      secretCode = state.secretCode || [];
+      guesses = state.guesses || [];
+      revealed = state.revealed || new Array(ballsCount).fill(false);
+      animationsEnabled = ('animationsEnabled' in state) ? !!state.animationsEnabled : animationsEnabled;
+      return true;
+    }catch(e){ console.warn('load failed', e); return false; }
+  }
+
+  // ---- משחק - יצירת סוד ----
+  function generateSecret(noRepeat){
+    const colors = getAllowedColors(ballsCount);
+    const secret = [];
+    if(noRepeat){
+      const pool = colors.slice();
+      for(let i=0;i<ballsCount;i++){
+        const idx = Math.floor(Math.random()*pool.length);
+        secret.push(pool.splice(idx,1)[0]);
+      }
+    } else {
+      for(let i=0;i<ballsCount;i++){
+        secret.push(colors[Math.floor(Math.random()*colors.length)]);
+      }
+    }
+    return secret;
+  }
+
+  // ---- רינדור אפשרויות צבע ----
+  function updateColorOptions(){
+    colorOptionsDiv.innerHTML = '';
+    const colors = getAllowedColors(ballsCount);
+    colors.forEach(color=>{
+      const btn = document.createElement('button');
+      btn.className = 'color-btn';
+      btn.style.background = color;
+      btn.type = 'button';
+      btn.setAttribute('aria-label', 'צבע');
+      btn.dataset.color = color;
+
+      // pointer events תומך במגע ועכבר
+      btn.addEventListener('pointerdown', (e)=>{
+        e.preventDefault();
+        addColorToGuess(color);
+        // משוב אנימציה קצר
+        if(animationsEnabled) { btn.classList.add('pulse'); setTimeout(()=>btn.classList.remove('pulse'),400); }
+      }, {passive:false});
+
+      colorOptionsDiv.appendChild(btn);
+    });
+    renderCurrent();
+  }
+
+  // ---- הוספת צבע לניחוש הנוכחי ----
+  function addColorToGuess(color){
+    if(currentGuess.length >= ballsCount) return;
+    currentGuess.push(color);
+    renderCurrent();
+    saveState();
+  }
+
+  // ---- רינדור ניחוש נוכחי ----
+  function renderCurrent(){
+    currentDiv.innerHTML = '';
+    for(let i=0;i<ballsCount;i++){
+      const span = document.createElement('button');
+      span.className = 'current-color';
+      span.type = 'button';
+      span.dataset.idx = i;
+      span.title = 'לחץ להסרה';
+      span.style.background = currentGuess[i] || 'transparent';
+      span.setAttribute('aria-label', currentGuess[i] ? 'הסר צבע' : 'מקום ריק');
+      span.addEventListener('pointerdown', (e)=>{
+        e.preventDefault();
+        const idx = Number(span.dataset.idx);
+        if(currentGuess[idx]){
+          currentGuess.splice(idx,1);
+          renderCurrent();
+          saveState();
+        }
+      }, {passive:false});
+      currentDiv.appendChild(span);
+    }
+  }
+
+  // ---- בדיקת ניחוש ----
+  function checkGuessResult(secret, guess){
+    let bulls=0, cows=0;
+    const usedS = new Array(ballsCount).fill(false);
+    const usedG = new Array(ballsCount).fill(false);
+    for(let i=0;i<ballsCount;i++){
+      if(guess[i]===secret[i]){ bulls++; usedS[i]=usedG[i]=true; }
+    }
+    for(let i=0;i<ballsCount;i++){
+      if(usedG[i]) continue;
+      for(let j=0;j<ballsCount;j++){
+        if(usedS[j]) continue;
+        if(guess[i]===secret[j]){ cows++; usedS[j]=true; break; }
+      }
+    }
+    return {bulls,cows};
+  }
+
+  // ---- הוספת ניחוש להיסטוריה ----
+  function pushGuessToHistory(guessColors, result){
+    const g = { id: uid(), colors: guessColors.slice(), bulls: result.bulls, cows: result.cows, ts: Date.now() };
+    guesses.unshift(g);
+    // שמור
+    saveState();
+    renderGuesses();
+  }
+
+  // ---- רינדור היסטוריה ----
+  function renderGuesses(){
+    guessesDiv.innerHTML = '';
+    guesses.forEach(g=>{
+      const row = document.createElement('div');
+      row.className = 'guess-row';
+      row.dataset.id = g.id;
+      row.setAttribute('role','article');
+      row.setAttribute('aria-label', `ניחוש: ${g.colors.join(', ')} - בולים ${g.bulls} פגיעות ${g.cows}`);
+      const left = document.createElement('div');
+      left.className = 'guess-colors-list';
+      g.colors.forEach(c=>{
+        const sp = document.createElement('span');
+        sp.className = 'guess-color';
+        sp.style.background = c;
+        left.appendChild(sp);
+      });
+
+      const right = document.createElement('div');
+      right.className = 'result';
+      for(let i=0;i<g.bulls;i++){ const b=document.createElement('span'); b.className='bull'; right.appendChild(b); }
+      for(let i=0;i<g.cows;i++){ const c=document.createElement('span'); c.className='cow'; right.appendChild(c); }
+
+      row.appendChild(left);
+      row.appendChild(right);
+
+      // הוספת gesture למחיקה: pointer events
+      attachSwipeToDelete(row, g.id);
+
+      guessesDiv.appendChild(row);
+    });
+  }
+
+  // ---- מציג רמזים ----
+  function renderHintBalls(){
+    hintBallsDiv.innerHTML = '';
+    for(let i=0;i<ballsCount;i++){
+      const el = document.createElement('button');
+      el.className = 'hint-ball' + (revealed[i] ? ' revealed' : '');
+      el.style.background = revealed[i] ? secretCode[i] : '#ffe9c7';
+      el.type = 'button';
+      el.dataset.idx = i;
+      el.title = revealed[i] ? 'הסתר רמז' : 'הצג רמז';
+      el.addEventListener('pointerdown', (e)=>{
+        e.preventDefault();
+        revealed[i] = !revealed[i];
+        renderHintBalls();
+        saveState();
+      }, {passive:false});
+      hintBallsDiv.appendChild(el);
+    }
+  }
+
+  // ---- אפקט ויברציה ----
+  function maybeVibrate(duration=30){
+    try{
+      if(vibrationEnabled && navigator.vibrate) navigator.vibrate(duration);
+    }catch(e){}
+  }
+
+  // ---- אירועים מרכזיים ----
+  checkBtn.addEventListener('pointerdown', (e)=>{
+    e.preventDefault();
+    if(animationsEnabled) checkBtn.classList.add('pulse');
+  }, {passive:false});
+  checkBtn.addEventListener('click', ()=>{
+    if(currentGuess.length < ballsCount){
+      statusDiv.textContent = `נא לבחור ${ballsCount} צבעים לפני בדיקה.`;
+      return;
+    }
+    const res = checkGuessResult(secretCode, currentGuess);
+    pushGuessToHistory(currentGuess, res);
+    if(res.bulls === ballsCount){
+      statusDiv.textContent = "ניצחת! פיצחת את הרצף!";
+      maybeVibrate(120);
+      // מנע בחירות נוספות
+      Array.from(document.querySelectorAll('.color-btn')).forEach(b=>b.disabled=true);
+    } else {
+      statusDiv.textContent = `בולים: ${res.bulls} — פגיעות: ${res.cows}`;
+      maybeVibrate(30);
+      currentGuess = [];
+      renderCurrent();
+    }
+    // אנימציה קצרה
+    setTimeout(()=>{ if(animationsEnabled) checkBtn.classList.remove('pulse'); }, 300);
+    saveState();
+  });
+
+  undoBtn.addEventListener('click', ()=>{
+    if(currentGuess.length) { currentGuess.pop(); renderCurrent(); saveState(); }
+  });
+
+  resetBtn.addEventListener('click', ()=>{
+    startNewGame(true);
+  });
+
+  // radio changes
+  ballsCountRadios.forEach(r=>{
+    r.addEventListener('change', ()=>{
+      ballsCount = parseInt(document.querySelector('input[name="ballsCount"]:checked').value,10);
+      startNewGame(true);
+    });
+  });
+
+  noRepeatCheck.addEventListener('change', ()=>{
+    allowNoRepeat = noRepeatCheck.checked;
+    startNewGame(true);
+  });
+
+  animToggle.addEventListener('click', ()=>{
+    animationsEnabled = !animationsEnabled;
+    animToggle.textContent = animationsEnabled ? 'פעיל' : 'כבוי';
+    animToggle.setAttribute('aria-pressed', animationsEnabled ? 'true' : 'false');
+    saveState();
+  });
+
+  // ---- מחוות — החלקה למחיקה ----
+  function attachSwipeToDelete(node, id){
+    let startX=0, currentX=0, touching=false;
+    const threshold = 80; // פיקסלים למחק
+    function onPointerDown(e){
+      touching = true;
+      startX = e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0;
+      node.style.transition = '';
+    }
+    function onPointerMove(e){
+      if(!touching) return;
+      currentX = (e.clientX || (e.touches && e.touches[0] && e.touches[0].clientX) || 0) - startX;
+      node.style.transform = `translateX(${currentX}px)`;
+      node.style.opacity = `${Math.max(0, 1 - Math.abs(currentX)/200)}`;
+    }
+    function onPointerUp(e){
+      touching = false;
+      node.style.transition = 'transform 220ms ease, opacity 220ms ease';
+      if(Math.abs(currentX) > threshold){
+        node.classList.add('slide-out');
+        setTimeout(()=>{
+          guesses = guesses.filter(g => g.id !== id);
+          saveState();
+          renderGuesses();
+        }, 300);
+      } else {
+        node.style.transform = '';
+        node.style.opacity = '';
+      }
+      startX = currentX = 0;
+    }
+
+    node.addEventListener('pointerdown', onPointerDown, {passive:true});
+    window.addEventListener('pointermove', onPointerMove, {passive:true});
+    window.addEventListener('pointerup', onPointerUp, {passive:true});
+    node.addEventListener('touchstart', onPointerDown, {passive:true});
+    node.addEventListener('touchmove', onPointerMove, {passive:true});
+    node.addEventListener('touchend', onPointerUp, {passive:true});
+  }
+
+  // ---- אתחול משחק ----
+  function startNewGame(forceNewSecret=false){
+    if(!secretCode.length || forceNewSecret){
+      secretCode = generateSecret(allowNoRepeat);
+    }
+    currentGuess = [];
+    revealed = new Array(ballsCount).fill(false);
+    document.querySelectorAll('input[name="ballsCount"]').forEach(inp=>{
+      inp.checked = Number(inp.value) === ballsCount;
+    });
+    noRepeatCheck.checked = allowNoRepeat;
+    if(forceNewSecret){
+      guesses = [];
+    }
+    statusDiv.textContent = `בחר ${ballsCount} צבעים מתוך ${getAllowedColors(ballsCount).length} ולחץ בדוק`;
+    updateColorOptions();
+    renderHintBalls();
+    renderGuesses();
+    renderCurrent();
+    saveState();
+  }
+
+  // ---- טענת מצב אם קיים ----
+  (function init(){
+    const loaded = loadState();
+    if(!loaded){
+      ballsCount = 4;
+      allowNoRepeat = false;
+      animationsEnabled = true;
+      secretCode = generateSecret(allowNoRepeat);
+      guesses = [];
+      revealed = new Array(ballsCount).fill(false);
+    } else {
+      if(!revealed || revealed.length !== ballsCount) revealed = new Array(ballsCount).fill(false);
+      if(!secretCode || secretCode.length !== ballsCount) secretCode = generateSecret(allowNoRepeat);
+    }
+    animToggle.textContent = animationsEnabled ? 'פעיל' : 'כבוי';
+    animToggle.setAttribute('aria-pressed', animationsEnabled ? 'true' : 'false');
+
+    updateColorOptions();
+    renderHintBalls();
+    renderGuesses();
+    renderCurrent();
+    statusDiv.textContent = `בחר ${ballsCount} צבעים מתוך ${getAllowedColors(ballsCount).length} ולחץ בדוק`;
+  })();
+
+  // ---- נקודות נגישות נוספות ----
+  document.addEventListener('keydown', (e)=>{
+    if(e.key === 'Enter'){
+      if(currentGuess.length >= ballsCount){
+        checkBtn.click();
+        e.preventDefault();
+      }
+    } else if(e.key === 'Backspace'){
+      if(currentGuess.length){ currentGuess.pop(); renderCurrent(); saveState(); e.preventDefault(); }
+    }
+  });
+
+  // חשיפה קצרה לסוד לפיתוח בלבד (הסר בשחרור)
+  window.__debug_getSecret = ()=>secretCode.slice();
+
+})();
+</script>
+</body>
+</html>
